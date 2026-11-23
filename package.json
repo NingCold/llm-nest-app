@@ -1,0 +1,20 @@
+{
+  "name": "llm-nest-app",
+  "private": true,
+  "version": "0.1.2",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "test": "tsc -p crypto/tsconfig.json && node crypto/test.cjs",
+    "build:crypto": "vite build --config vite.crypto.config.ts"
+  },
+  "dependencies": {
+    "@matrix-org/matrix-sdk-crypto-wasm": "18.9.0",
+    "@noble/curves": "2.4.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vite": "6.4.3"
+  }
+}

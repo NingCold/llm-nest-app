@@ -1,0 +1,17 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+.idea/
+*.iml
+.cxx/
+captures/
+java_pid*.hprof
+
+node_modules/
+*.jks
+*.keystore
+*.p12
+.env
+.env.*
+__pycache__/

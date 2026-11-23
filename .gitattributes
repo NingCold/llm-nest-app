@@ -1,0 +1,9 @@
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+*.jar binary
+
+*.yml text eol=lf
+LICENSE text eol=lf
+NOTICE text eol=lf
+crypto/shared/**/*.ts text eol=lf
+gradle/licenses/*.txt -text -whitespace
