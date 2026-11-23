@@ -14,6 +14,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--serial", required=True, help="Exact adb serial of the authorized test device")
     parser.add_argument("--fixture", type=Path, required=True, help="Directory created by interop_fixture.py")
+    emulator_tests = ["AndroidChatUiTest", "CryptoInteropTest", "DeviceRecoveryUiTest"]
+    parser.add_argument("--test", choices=emulator_tests, help="Run one test class on the disposable emulator")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--assisted-handset", action="store_true",
                         help="Run only the assisted real-device test; install neither APK")
@@ -22,6 +24,8 @@ def main():
     parser.add_argument("--user", help="Explicit active Android profile ID; required with --handset-drafts")
     args = parser.parse_args()
     handset = args.assisted_handset or args.handset_drafts
+    if handset and args.test:
+        parser.error("--test is only for disposable emulators.")
     if args.handset_drafts and (args.user is None or not args.user.isdecimal()):
         parser.error("--handset-drafts requires an explicit numeric --user profile ID.")
     if args.user is not None and not args.handset_drafts:
@@ -45,7 +49,7 @@ def main():
         classes = ["DeviceRecoveryUiTest"] if args.handset_drafts else ["HandsetAcceptanceUiTest"]
         subprocess.run([*prefix, "reverse", "--no-rebind", socket, socket], check=True)
     else:
-        classes = ["AndroidChatUiTest", "CryptoInteropTest", "DeviceRecoveryUiTest"]
+        classes = [args.test] if args.test else emulator_tests
         subprocess.run([*prefix, "reverse", socket, socket], check=True)
     try:
         if not handset:

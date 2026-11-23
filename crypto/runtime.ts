@@ -36,13 +36,14 @@ function section(title: string) { const node = element("section"); node.append(e
 async function render() {
   const state = await dispatch("state", {}) as Args;
   app.replaceChildren(element("h1", "可信设备与恢复"));
-  button(app, "完成，返回聊天", () => window.NativeCrypto.done());
+  button(app, state.chatAllowed ? "完成，返回聊天" : "返回锁屏", () => window.NativeCrypto.done());
   if (notice) { const error = element("p", notice); error.setAttribute("role", "alert"); app.append(error); }
   if (state.locked) {
     const node = section(state.hasDevice ? "解锁本机资料" : "创建独立设备");
     node.append(element("p", "本机口令与登录密码分开，只保护此设备的加密库。不会自动解锁。"));
     const passphrase = field(node, "独立本机口令（至少 8 位）", "password");
     button(node, state.hasDevice ? "解锁本机资料" : "确认创建独立设备", async () => { const value = passphrase.value; passphrase.value = ""; await dispatch("unlock", { passphrase: value, create: !state.hasDevice }); });
+    if (state.hasPendingDevice) button(node, "用待授权设备口令继续恢复", async () => { const value = passphrase.value; passphrase.value = ""; await dispatch("unlock", { passphrase: value, create: "resume-device" }); });
     if (state.hasDevice) button(node, "无法解锁？建立另一独立设备", async () => {
       // Native confirm is required; no browser confirmation or silent replacement.
       window.NativeCrypto.recovery("new-device");

@@ -53,9 +53,9 @@ class AndroidChatUiTest {
         }
     }
     private fun tap(label: String) = main {
-        var target: View = descendants(root()).filterIsInstance<TextView>().first {
-            it !is EditText && (it.text.toString() == label || it.contentDescription?.toString() == label) && it.isShown
-        }
+        var target: View = descendants(root()).firstOrNull {
+            it !is EditText && it.isShown && ((it as? TextView)?.text?.toString() == label || it.contentDescription?.toString() == label)
+        } ?: error("Missing visible control: $label")
         while (!target.isClickable) target = target.parent as? View ?: error("No clickable ancestor for $label")
         assertTrue("Control $label is enabled", target.isEnabled)
         assertTrue("Click $label", target.performClick())

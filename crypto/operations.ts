@@ -14,13 +14,28 @@ function mark(message: Message): Message {
 async function pinned(conversation: Conversation) {
   return (await content.projectConversations([conversation], account))[0];
 }
+function chatAllowed() {
+  return !!engine.trustedCryptoDevice(account) || (!engine.hasCryptoDevice(account) && !engine.cryptoDevice(account));
+}
+async function deviceState() {
+  const id = engine.cryptoDevice(account);
+  const hasDevice = engine.hasCryptoDevice(account);
+  const status = id ? await engine.deviceStatus() : null;
+  return { ...status, locked: !id, hasDevice, chatAllowed: chatAllowed(), hasPendingDevice: engine.hasPendingCryptoDevice(account), recoveryConfirmed: engine.recoveryConfirmed(account) };
+}
 export async function dispatch(op: string, args: Args): Promise<object> {
+  if (["projectSnapshot", "projectPage", "prepareSend", "enable"].includes(op)) {
+    if (!chatAllowed()) throw new Error("请先解锁原设备，或在可信设备与恢复中授权此设备");
+    const epoch = engine.cryptoGeneration();
+    const result = await perform(op, args);
+    if (epoch !== engine.cryptoGeneration() || !chatAllowed()) throw new Error("本机设备已变化，请重新解锁");
+    return result;
+  }
+  return perform(op, args);
+}
+async function perform(op: string, args: Args): Promise<object> {
   switch (op) {
-    case "state": return {
-      locked: !engine.cryptoDevice(account), hasDevice: engine.hasCryptoDevice(account),
-      recoveryConfirmed: engine.recoveryConfirmed(account),
-      ...(engine.cryptoDevice(account) ? await engine.deviceStatus() : {}),
-    };
+    case "state": return deviceState();
     case "projectSnapshot": {
       const snapshot: Snapshot = args.snapshot;
       if (snapshot.self.id !== account) throw new Error("账号已切换");
@@ -42,7 +57,7 @@ export async function dispatch(op: string, args: Args): Promise<object> {
     case "enable": return await content.enableEncryption(await pinned(args.conversation), account) as object;
     case "sync": {
       if (engine.cryptoDevice(account)) await engine.syncCrypto();
-      const result = { changed, locked: !engine.cryptoDevice(account) }; changed = false; return result;
+      const result = { ...await deviceState(), changed }; changed = false; return result;
     }
     case "unlock":
       if (typeof args.passphrase !== "string" || args.passphrase.length < 8) throw new Error("请输入至少 8 位的独立本机口令");

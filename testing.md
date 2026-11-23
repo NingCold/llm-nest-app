@@ -46,7 +46,7 @@ QA APK 使用单独的应用 ID 和临时测试 CA；**不要把它交给使用�
 
 `AndroidChatUiTest` 通过可见控件登录、从通讯录打开既有私聊，并让对端核对收到的正文和条数；对端发送后，不点击刷新即可在手机看到回复。它还会核对返回原会话后历史和草稿是否还在。`CryptoInteropTest` 在 Android WebView 中实际运行官方 Matrix SDK，检验双方信任、密文收发、恢复原文和拒绝明文降级。截图、编译通过或单方“已发送”都不能代替另一端读回同一条原文。
 
-`DeviceRecoveryUiTest` 单独运行时，只传 `origin`、`emailA`、`passwordA` 即可验证恢复文件保存。模拟器脚本还会传入对端账号和 `backgroundDraftCheck=true`，在同一个已建立密钥的账号上验证草稿慢写、写失败时的后台锁定。
+给模拟器命令加上 `--test DeviceRecoveryUiTest` 可单独验证恢复文件保存、草稿慢写或失败时的后台锁定，以及待授权设备不能读取原草稿和待确认发送。已建立过身份的用例需要新的 fixture。
 
 ## 在授权真机上验证输入法、文件保存和后台锁定
 

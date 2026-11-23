@@ -191,6 +191,47 @@ class DeviceRecoveryUiTest {
             waitFor("production retry is durable") { journal.load(room).text == failed && main { field("draftError").get(activity) == null } }
             returnAndUnlock("retry-durable", expected = failed)
             stage("SLOW_AND_FAILED_DRAFT_BACKGROUND_LOCK_VERIFIED retry-durable=true")
+            if (args.getString("handsetDrafts") != "true") {
+                main { (activity as MainActivity).lock() }
+                waitFor("locked original device") { hasNative("聊天已锁定") }
+                host = main { field("host").get(activity) as CryptoHost }
+                web = main { CryptoHost::class.java.getDeclaredField("web").apply { isAccessible = true }.get(host) as WebView }
+                val pending = journal.prepare(room, JSONObject().put("requestId", UUID.randomUUID().toString()))
+                val currentText = "after-pending-${UUID.randomUUID()}"
+                journal.saveText(room, currentText)
+                tapNative("解锁加密设备")
+                click("无法解锁？建立另一独立设备")
+                fun prompt(button: String): AlertDialog? = main {
+                    val alerts = CryptoHost::class.java.getDeclaredField("alerts").apply { isAccessible = true }.get(host) as List<*>
+                    alerts.filterIsInstance<AlertDialog>().firstOrNull { it.isShowing && it.getButton(AlertDialog.BUTTON_POSITIVE)?.text == button }
+                }
+                waitFor("confirm independent device") { prompt("继续") != null }
+                main { prompt("继续")!!.getButton(AlertDialog.BUTTON_POSITIVE).performClick() }
+                waitFor("set replacement passphrase") { prompt("确认建立") != null }
+                main {
+                    val dialog = prompt("确认建立")!!
+                    views(dialog.window!!.decorView).filterIsInstance<EditText>().single().setText("isolated-replacement-${UUID.randomUUID()}")
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+                }
+                waitFor("unapproved store ready for recovery") { hasButton("锁定本机资料") && !state().getBoolean("chatAllowed") }
+                click("返回锁屏")
+                waitFor("replacement kept behind gate") { hasNative("聊天已锁定") }
+                main {
+                    assertNull(field("snapshot").get(activity)); assertNull(field("draft").get(activity))
+                    assertNull(mountedDraft())
+                }
+                tapNative("解锁加密设备")
+                click("锁定本机资料")
+                waitFor("open original store") { hasButton("解锁本机资料") }
+                eval("document.querySelector('input[type=password]').value=${JSONObject.quote(passphrase)}")
+                click("解锁本机资料")
+                waitFor("trusted original store") { state().getBoolean("chatAllowed") && hasButton("完成，返回聊天") }
+                click("完成，返回聊天")
+                waitFor("original draft and pending send after trusted unlock") {
+                    main { mountedDraft()?.text?.toString() == currentText && hasNative(pending.text) }
+                }
+                stage("ORIGINAL_DRAFT_AND_PENDING_REQUIRE_TRUSTED_DEVICE")
+            }
         } finally { peerClient.close() }
     }
 
@@ -260,7 +301,7 @@ class DeviceRecoveryUiTest {
             val bytes = file.readBytes()
             try {
                 val recovery = JSONObject(String(bytes, Charsets.UTF_8))
-                assertEquals("llmn-recovery-v1", recovery.getString("format"))
+                assertEquals("llmn-recovery-v2", recovery.getString("format"))
                 assertEquals(client.origin, recovery.getString("server"))
                 assertEquals(account, recovery.getString("accountId"))
                 assertTrue(recovery.getString("version").isNotBlank())

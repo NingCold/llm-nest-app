@@ -11,6 +11,10 @@ class CryptoRoutesTest {
         }
         assertTrue(CryptoRoutes.allowed("POST", "/crypto/requests"))
         assertTrue(CryptoRoutes.allowed("POST", "/crypto/devices"))
+        assertTrue(CryptoRoutes.allowed("POST", "/crypto/authority/enroll"))
+        assertTrue(CryptoRoutes.allowed("GET", "/crypto/authority/devices/existing-device"))
+        assertTrue(CryptoRoutes.allowed("GET", "/crypto/backup/keys?version=dce6651c-04c9-45c9-b27e-6b5b2f082e5c"))
+        assertFalse(CryptoRoutes.allowed("GET", "/crypto/recovery?version=unknown"))
         assertTrue(CryptoRoutes.allowed("PUT", "/crypto/recovery"))
         assertTrue(CryptoRoutes.allowed("POST", "/chat/conversations/abc-123/encryption"))
         listOf("https://other.invalid/crypto/backup", "/crypto/backup?redirect=x", "/crypto/backup#fragment", "/crypto/../auth/login", "/crypto/%2e%2e/auth/login", "/crypto\\backup", "/auth/logout", "/me").forEach {

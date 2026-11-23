@@ -30,11 +30,13 @@ function load(file, imports, globals = {}) {
   window.cryptoReply(sent[3][0], { error: { status: 0, message: 'offline', code: 'connection_error' } });
   await assert.rejects(offline, e => e instanceof api.ConnectionError && e.code === 'connection_error');
 
-  let unlocked = false, calls = 0;
+  let unlocked = false, trusted = false, known = true, calls = 0;
   const engine = {
     cryptoDevice: () => unlocked ? 'local' : undefined,
-    hasCryptoDevice: () => true, recoveryConfirmed: () => true,
-    deviceStatus: async () => ({ deviceId: 'local', trusted: false }),
+    trustedCryptoDevice: () => unlocked && trusted ? 'local' : null,
+    cryptoGeneration: () => 1,
+    hasPendingCryptoDevice:()=>false,hasCryptoDevice: () => known, recoveryConfirmed: () => true,
+    deviceStatus: async () => ({ deviceId: 'local', trusted }),
     matrixRoom: id => `!${id}:llmn`, matrixUser: id => `@${id}:llmn`,
     unseal: async () => { if (!unlocked) throw Error('locked'); return { type: 'com.llmn.content.v1', content: payload }; },
     seal: async () => ({ device_id: 'local', ciphertext: 'synthetic-test-ciphertext' }),
@@ -50,16 +52,27 @@ function load(file, imports, globals = {}) {
   const message = { id: 'message', conversationId: 'room', senderId: 'self', revision: '1', position: '1', status: 'committed', text: 'injected', mentions: [], replyTo: null, attachments: [], sealed: { version: 1, roomId: '!room:llmn', sender: '@self:llmn', deviceId: 'local', eventId: '$message.1.final', content: { device_id: 'local' } } };
   const payload = { version: 1, server: 'https://fixture.invalid', kind: 'message', conversationId: 'room', messageId: 'message', senderId: 'self', revision: '1', text: 'authenticated', mentions: [], replyTo: null };
   assert.equal((await ops.dispatch('state', {})).locked, true); assert.equal(calls, 0, 'reading state must not create/unlock a device');
-  const locked = await ops.dispatch('projectPage', { conversation, page: { messages: [message] } });
-  assert.equal(locked.messages[0].text, ''); assert.equal(locked.messages[0]._decrypted, undefined);
+  const project = () => ops.dispatch('projectPage', { conversation, page: { messages: [message] } });
+  await assert.rejects(project(), /授权此设备/);
+  known = false;
+  assert.equal((await ops.dispatch('state', {})).chatAllowed, true, 'plaintext chat before creating the first local identity stays available');
+  const locked = await project(); assert.equal(locked.messages[0].text, '');
+  known = true;
   await ops.dispatch('unlock', { passphrase: 'independent-passphrase' });
   assert.equal((await ops.dispatch('sync', {})).changed, false);
   listeners['llmn-crypto-change']();
   assert.equal((await ops.dispatch('sync', {})).changed, true);
   assert.equal((await ops.dispatch('sync', {})).changed, false);
   assert.equal((await ops.dispatch('state', {})).trusted, false, 'unlocked does not imply trusted');
+  assert.equal((await ops.dispatch('state', {})).chatAllowed, false);
+  await assert.rejects(project(), /授权此设备/);
+  trusted = true;
+  assert.equal((await ops.dispatch('state', {})).chatAllowed, true);
   const projected = await ops.dispatch('projectPage', { conversation, page: { messages: [message] } });
   assert.equal(projected.messages[0].text, 'authenticated'); assert.equal(projected.messages[0]._decrypted, true);
+  await assert.rejects(ops.dispatch('projectPage', { conversation: { ...conversation, id: 'other-room' }, page: { messages: [message] } }), /不属于所选窗口/);
+  const shifted = await ops.dispatch('projectPage', { conversation: { ...conversation, encryption: { ...conversation.encryption, activationPosition: '9' } }, page: { messages: [{ ...message, sealed: undefined }] } });
+  assert.equal(shifted.messages[0].text, ''); assert.match(shifted.messages[0].cryptoError, /明文回退/);
   const downgraded = await ops.dispatch('projectPage', { conversation: { ...conversation, encryption: null }, page: { messages: [{ ...message, sealed: undefined }] } });
   assert.equal(downgraded.messages[0].text, ''); assert.match(downgraded.messages[0].cryptoError, /明文回退/);
   const command = await ops.dispatch('prepareSend', { conversation, text: 'private input', requestId: 'same-request' });

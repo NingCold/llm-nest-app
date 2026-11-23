@@ -121,10 +121,10 @@ class CryptoHost(private val activity: Activity, private val cloud: CloudClient,
     }
 
     /** Device UI stays in a trusted, bundled view; the chat/navigation remain native. */
-    fun showDevices(peerAccountId: String? = null, onChanged: () -> Unit = {}) {
-        if (closed.get()) return
-        failure?.let { showSecure(AlertDialog.Builder(activity).setMessage(it.message).setPositiveButton("确定", null).create()); return }
-        if (dialog != null) return
+    fun showDevices(peerAccountId: String? = null, onChanged: () -> Unit = {}): Boolean {
+        if (closed.get()) return false
+        failure?.let { showSecure(AlertDialog.Builder(activity).setMessage(it.message).setPositiveButton("确定", null).create()); return false }
+        if (dialog != null) return false
         val window = Dialog(activity)
         window.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         dialog = window
@@ -139,6 +139,7 @@ class CryptoHost(private val activity: Activity, private val cloud: CloudClient,
         window.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         val showPeer = { js("window.cryptoSetPeer(${JSONObject.quote(peerAccountId.orEmpty())})") }
         if (ready) showPeer() else waiting.add(showPeer)
+        return true
     }
 
     /** Dismissing setup reports the actual current lock/trust state; it never establishes trust itself. */
@@ -284,6 +285,8 @@ class CryptoHost(private val activity: Activity, private val cloud: CloudClient,
 
 /** Only routes needed by the shared SDK and explicit encryption activation may cross this bridge. */
 internal object CryptoRoutes {
+    private val historyRead = Regex("/crypto/(?:backup(?:/keys)?|recovery)(?:\\?version=[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})?")
+    private val authority = Regex("/crypto/authority/devices/[A-Za-z0-9_-]{1,255}")
     fun allowed(method: String, path: String): Boolean {
         if (path.contains('#') || path.contains('\\') || path.contains('%')) {
             // Percent encoding is permitted only in sync query values, never in route segments.
@@ -291,8 +294,8 @@ internal object CryptoRoutes {
         }
         val route = path.substringBefore('?')
         return when (method) {
-            "GET" -> route in setOf("/crypto/sync", "/crypto/backup", "/crypto/backup/keys", "/crypto/recovery", "/chat/init") && (route == "/crypto/sync" || !path.contains('?'))
-            "POST" -> !path.contains('?') && (route in setOf("/crypto/requests", "/crypto/devices") || route.matches(Regex("/chat/conversations/[A-Za-z0-9_-]+/encryption")))
+            "GET" -> route == "/crypto/sync" || path == "/chat/init" || historyRead.matches(path) || authority.matches(path)
+            "POST" -> !path.contains('?') && (route in setOf("/crypto/requests", "/crypto/devices", "/crypto/authority/enroll") || route.matches(Regex("/chat/conversations/[A-Za-z0-9_-]+/encryption")))
             "PUT" -> path in setOf("/crypto/backup", "/crypto/recovery")
             else -> false
         }

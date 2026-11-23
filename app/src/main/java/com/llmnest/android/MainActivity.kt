@@ -107,7 +107,7 @@ class MainActivity : Activity(), ChatScreens.Actions {
         val account = me ?: return ui.login(prefs.getString("origin", "") ?: "", busy, error)
         val data = snapshot
         if (data == null || gateLocked || changingGate) {
-            ui.gate(account.optString("name"), busy || changingGate || (data == null && error == null && !gateLocked), gateLocked, error)
+            ui.gate(account.optString("name"), busy || changingGate || (data == null && error == null && !gateLocked), gateLocked && !changingGate, error)
             return
         }
         val state = device
@@ -157,9 +157,9 @@ class MainActivity : Activity(), ChatScreens.Actions {
         val runtime = CryptoHost(this, client, id)
         runtime.onUnauthorized = { if (host === runtime) endSession("登录已失效，请重新登录。") }
         host = runtime; store = DraftStore(this, client.origin, id)
-        changingGate = true; error = null; render()
+        gateLocked = true; changingGate = true; error = null; render()
         job {
-            try { device = runtime.perform("state"); gateLocked = device!!.optBoolean("hasDevice") && device!!.optBoolean("locked") }
+            try { device = runtime.perform("state"); gateLocked = !device!!.optBoolean("chatAllowed") }
             finally { changingGate = false; render() }
             if (!gateLocked) refreshFeed()
         }
@@ -169,14 +169,20 @@ class MainActivity : Activity(), ChatScreens.Actions {
     private fun openDevices() {
         if (busy || changingGate) return
         val runtime = host ?: return
-        runtime.showDevices(selected()?.optJSONObject("peer")?.optString("id")) {
-            if (host === runtime && !changingGate) job {
-                device = runtime.perform("state")
-                gateLocked = device!!.optBoolean("hasDevice") && device!!.optBoolean("locked")
-                error = null
-                if (gateLocked) clearFeed() else refreshFeed()
-                render()
-            }
+        val peer = selected()?.optJSONObject("peer")?.optString("id")
+        afterDraft {
+            if (!runtime.showDevices(peer) {
+                if (host === runtime) job {
+                    try {
+                        device = runtime.perform("state")
+                        gateLocked = !device!!.optBoolean("chatAllowed")
+                        error = null
+                    } finally { changingGate = false; render() }
+                    if (!gateLocked) refreshFeed()
+                }
+            }) return@afterDraft
+            stopOperations(); clearFeed()
+            gateLocked = true; changingGate = true; render()
         }
     }
     override fun lock() = afterDraft { lockDevice() }
@@ -245,11 +251,11 @@ class MainActivity : Activity(), ChatScreens.Actions {
                 delay(6000)
                 try {
                     val outcome = runtime.perform("sync")
-                    if (outcome.optBoolean("locked")) { lockDevice(); return@job }
+                    if (!outcome.optBoolean("chatAllowed")) { lockDevice(); return@job }
                     if (outcome.optBoolean("changed")) refreshFeed()
                 } catch (e: CloudError) {
                     if (e.status == 401) throw e
-                    if (e.status == 403 && runtime.perform("state").optBoolean("locked")) {
+                    if (e.status == 403 && !runtime.perform("state").optBoolean("chatAllowed")) {
                         lockDevice(); error = "设备授权已失效，请重新核对设备。"; render(); return@job
                     }
                     error = e.message; render()
@@ -298,6 +304,7 @@ class MainActivity : Activity(), ChatScreens.Actions {
         loadDraft(id); loadHistory(); render()
     }
     private fun loadDraft(id: String) {
+        if (gateLocked || changingGate || device?.optBoolean("chatAllowed") != true) return
         val view = route; val journal = store!!
         job {
             val value = try { withContext(draftIO) { journal.load(id) } } catch (e: Exception) {
