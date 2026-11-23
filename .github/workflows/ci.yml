@@ -38,7 +38,8 @@ jobs:
           python3 tools/check_apk.py app/build/outputs/apk/debug/app-debug.apk
           args=()
           if [[ "$GITHUB_REF_TYPE" == tag ]]; then args+=(--tag "$GITHUB_REF_NAME"); fi
-          python3 tools/check_apk.py app/build/outputs/apk/release/app-release-unsigned.apk "${args[@]}"
+          cp app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/llm-nest-app.apk"
+          python3 tools/check_apk.py "$RUNNER_TEMP/llm-nest-app.apk" "${args[@]}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: llm-nest-android-unsigned

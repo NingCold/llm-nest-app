@@ -11,6 +11,8 @@ python tools/check_apk.py app/build/outputs/apk/release/app-release-unsigned.apk
 
 Windows 将 `./gradlew` 换成 `gradlew.bat`。CI 同时检查调试与正式构建；只将未签名的 release APK 作为构建产物保存。
 
+下载或重命名 APK 后，在对应版本的源码中运行 `python tools/check_apk.py <APK路径> --tag v0.1.2`。脚本用 Build Tools 36.0.0 的 `aapt2` 读取包内应用 ID、versionName 和 versionCode，再核对随包许可。SDK 可通过 `--sdk-root` 或 `ANDROID_HOME` 指定；也可从 PATH 中的 `platform-tools/adb` 定位。
+
 ### 签名与发布
 
 使用 Android Studio 的 **Generate Signed App Bundle or APK → APK → release**，选择发行用的密钥库与别名；密钥和口令保存在发行者的私有环境中。用 Android SDK Build Tools 的 `apksigner verify --verbose --print-certs <签名后的.apk>` 核对发行证书，安装验证后再将该 APK 附到对应版本的 Release。调试包和未签名的 CI 产物都不能代替发行包。

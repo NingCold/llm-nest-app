@@ -1,6 +1,10 @@
 """Inspect packaged Android and Matrix attributions and verify release metadata."""
 import argparse
 import json
+import os
+import re
+import shutil
+import subprocess
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -10,16 +14,40 @@ def require(condition, message):
     if not condition:
         raise SystemExit(message)
 
+def sdk_root():
+    for name in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
+        if os.environ.get(name):
+            return Path(os.environ[name])
+    adb = shutil.which("adb")
+    if adb and Path(adb).parent.name == "platform-tools":
+        return Path(adb).resolve().parents[1]
+    return None
+
+def apk_identity(apk, sdk):
+    require(sdk is not None, "set ANDROID_HOME or pass --sdk-root for Android Build Tools 36.0.0")
+    aapt = sdk / "build-tools" / "36.0.0" / ("aapt2.exe" if os.name == "nt" else "aapt2")
+    require(aapt.is_file(), f"Android Build Tools 36.0.0 not found at {aapt}")
+    result = subprocess.run([str(aapt), "dump", "badging", str(apk.resolve())],
+                            capture_output=True, encoding="utf-8", errors="replace")
+    require(result.returncode == 0, f"aapt2 failed: {result.stderr.strip()}")
+    package = next((line for line in result.stdout.splitlines() if line.startswith("package: ")), "")
+    fields = dict(re.findall(r"([A-Za-z]+)='([^']*)'", package))
+    require({"name", "versionName", "versionCode"} <= fields.keys(), "missing APK manifest identity")
+    return fields
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("apk", type=Path)
     parser.add_argument("--tag", help="release tag for the checked artifact")
+    parser.add_argument("--sdk-root", type=Path, help="Android SDK containing Build Tools 36.0.0")
     args = parser.parse_args()
-    metadata = json.loads((args.apk.parent / "output-metadata.json").read_text(encoding="utf-8"))
-    entry = next(x for x in metadata["elements"] if x["outputFile"] == args.apk.name)
+    identity = apk_identity(args.apk, args.sdk_root or sdk_root())
     version = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"]
-    require(metadata["applicationId"] == "com.llmnest.android", "wrong application ID")
-    require(entry["versionName"] == version, "inconsistent release version")
+    code = re.search(r"^appVersionCode=(\d+)$", (ROOT / "gradle.properties").read_text(encoding="utf-8"), re.MULTILINE)
+    require(code, "missing appVersionCode in gradle.properties")
+    require(identity["name"] == "com.llmnest.android", "wrong application ID: " + identity["name"])
+    require(identity["versionName"] == version, "unexpected APK versionName: " + identity["versionName"])
+    require(identity["versionCode"] == code[1], "unexpected APK versionCode: " + identity["versionCode"])
     require(not args.tag or args.tag == "v" + version, "release tag does not match APK")
     with ZipFile(args.apk) as apk:
         for scope in ("assets/", "assets/crypto/"):
@@ -39,7 +67,7 @@ def main():
             require(name in native, "missing native attribution: " + name)
     with ZipFile(ROOT / "gradle/wrapper/gradle-wrapper.jar") as wrapper:
         require(b"END OF TERMS AND CONDITIONS" in wrapper.read("META-INF/LICENSE"), "incomplete Gradle wrapper license")
-    print(f"{args.apk.name}: {version} ({entry['versionCode']}), local SDK and runtime licenses verified")
+    print(f"{args.apk.name}: {identity['name']} {version} ({identity['versionCode']}), local SDK and runtime licenses verified")
 
 if __name__ == "__main__":
     main()
