@@ -8,9 +8,11 @@
 
 ## 开始使用
 
-需要 Android 8.0 或更高版本、支持 Matrix WASM 的 Android System WebView，以及已有的 LLM Nest 账号。登录站点后，从 **消息** 或 **通讯录** 开始。注册、创建群和发送附件请使用 Web 或桌面端。[连接站点与恢复加密聊天](usage.md)
+[下载签名 APK](https://github.com/NingCold/llm-nest-app/releases/latest) 并安装到手机。需要 Android 8.0 或更高版本，以及支持 Matrix WASM 的 Android System WebView。
 
-## 安装与构建
+打开应用，输入你的站点地址，用已有账号登录。从 **消息** 回到群聊，或在 **通讯录** 点开朋友的名字继续私聊。注册、创建群和发送附件请使用 Web 或桌面端。[连接站点与恢复加密聊天](usage.md)
+
+## 从源码构建
 
 用 Android Studio 打开本仓，选择模拟器或测试设备并点击 **Run**。命令行需要 JDK 17 或 21、Android SDK Platform 36 和 Build Tools 36.0.0：
 
